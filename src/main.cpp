@@ -30,7 +30,7 @@ int daemon(void)
 	if (!(geteuid() == 0))
 	{
 		std::println("Matt_daemon requires root privileges.");
-		openlog("Matt_daemon.log", LOG_NOWAIT | LOG_PID, LOG_USER);
+		openlog("Matt_daemon", LOG_PID, LOG_DAEMON);
 		syslog(LOG_ERR, "Matt_daemon requires root privileges");
 		closelog();
 		exit(EXIT_FAILURE);
@@ -52,7 +52,7 @@ int daemon(void)
 
 	umask(0);
 	/* child process */
-	openlog("Matt_daemon.log", LOG_NOWAIT | LOG_PID, LOG_USER);
+	openlog("Matt_daemon", LOG_NOWAIT | LOG_PID, LOG_USER);
 	syslog(LOG_NOTICE, "Successfully started Matt_daemon");
 	sid = setsid();
 	if (sid < 0)
