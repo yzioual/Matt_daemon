@@ -9,10 +9,18 @@
 #include <sys/file.h>
 #include <cstring>
 #include <string>
+#include <vector>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <poll.h>
 #include "Tintin_reporter.hpp"
 
 std::atomic<bool> g_running { true };
 constexpr const char* LOCK_FILE_PATH = "/var/lock/Matt_daemon.lock";
+constexpr int PORT = 4242;
+constexpr int MAX_CLIENTS = 3;
+constexpr int BUFFER_SIZE = 1024;
 
 void do_heartbeat(void)
 {
@@ -65,14 +73,113 @@ bool ensure_one_instance()
 	return true;	
 }
 
+
+void work() {
+    auto& logger = Tintin_reporter::getInstance();
+
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) {
+        logger.log(Tintin_reporter::Level::ERROR, "Failed to create socket: " + std::string(strerror(errno)));
+        return;
+    }
+
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+
+    if (bind(server_fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) < 0) {
+        logger.log(Tintin_reporter::Level::ERROR, "Failed to bind to port " + std::to_string(PORT) + ": " + strerror(errno));
+        close(server_fd);
+        return;
+    }
+
+    if (listen(server_fd, MAX_CLIENTS) < 0) {
+        logger.log(Tintin_reporter::Level::ERROR, "Listen failed: " + std::string(strerror(errno)));
+        close(server_fd);
+        return;
+    }
+
+    logger.log(Tintin_reporter::Level::INFO, "Server listening on port " + std::to_string(PORT));
+
+    std::vector<pollfd> fds;
+    
+    pollfd server_pfd{};
+    server_pfd.fd = server_fd;
+    server_pfd.events = POLLIN;
+    fds.push_back(server_pfd);
+
+    while (true) {
+        int poll_count = poll(fds.data(), fds.size(), -1);
+        if (poll_count < 0) {
+            if (errno == EINTR) continue;
+            logger.log(Tintin_reporter::Level::ERROR, "Poll error: " + std::string(strerror(errno)));
+            break;
+        }
+
+        if (fds[0].revents & POLLIN) {
+            sockaddr_in client_addr{};
+            socklen_t addr_len = sizeof(client_addr);
+            int new_client_fd = accept(server_fd, reinterpret_cast<sockaddr*>(&client_addr), &addr_len);
+
+            if (new_client_fd >= 0) {
+                if (fds.size() - 1 >= MAX_CLIENTS) {
+                    logger.log(Tintin_reporter::Level::WARN, "Max clients (3) reached. Rejecting connection from " + 
+                               std::string(inet_ntoa(client_addr.sin_addr)));
+                    
+                    const char* msg = "Server full: Maximum 3 clients connected.\n";
+                    write(new_client_fd, msg, strlen(msg));
+                    close(new_client_fd);
+                } else {
+                    pollfd client_pfd{};
+                    client_pfd.fd = new_client_fd;
+                    client_pfd.events = POLLIN;
+                    fds.push_back(client_pfd);
+
+                    logger.log(Tintin_reporter::Level::INFO, "Client connected from " + std::string(inet_ntoa(client_addr.sin_addr)) + 
+                               " [Total: " + std::to_string(fds.size() - 1) + "/3]");
+                }
+            }
+        }
+
+        for (size_t i = 1; i < fds.size();) {
+            if (fds[i].revents & POLLIN) {
+                char buffer[BUFFER_SIZE];
+                ssize_t bytes_read = read(fds[i].fd, buffer, sizeof(buffer) - 1);
+
+                if (bytes_read <= 0) {
+                    logger.log(Tintin_reporter::Level::INFO, "Client disconnected. [Total: " + std::to_string(fds.size() - 2) + "/3]");
+                    close(fds[i].fd);
+                    fds.erase(fds.begin() + i);
+                    continue;
+                } else {
+                    buffer[bytes_read] = '\0';
+                    std::string message(buffer);
+
+                    while (!message.empty() && (message.back() == '\n' || message.back() == '\r')) {
+                        message.pop_back();
+                    }
+
+                    if (!message.empty()) {
+                        logger.log(Tintin_reporter::Level::INFO, "User input: " + message);
+                    }
+                }
+            }
+            ++i;
+        }
+    }
+
+    for (const auto& pfd : fds) {
+        close(pfd.fd);
+    }
+}
+
+
 int daemon(void)
 {
-	if (!Tintin_reporter::getInstance().init())
-	{
-		std::cerr << "Failed to init Tintin_reporter.\n";
-		exit(EXIT_FAILURE);
-	}
-
 	if (!(geteuid() == 0))
 	{
 		std::println("Matt_daemon requires root privileges.");
@@ -80,6 +187,12 @@ int daemon(void)
 		openlog("Matt_daemon", LOG_PID, LOG_DAEMON);
 		syslog(LOG_ERR, "Matt_daemon requires root privileges");
 		closelog();
+		exit(EXIT_FAILURE);
+	}
+
+	if (!Tintin_reporter::getInstance().init())
+	{
+		std::cerr << "Failed to init Tintin_reporter.\n";
 		exit(EXIT_FAILURE);
 	}
 
@@ -121,12 +234,9 @@ int daemon(void)
 	close(STDOUT_FILENO);
 	close(STDERR_FILENO);
 
-	const int SLEEP_INT = 5;
 	while (g_running.load(std::memory_order_relaxed))
 	{
-		//work();
-		do_heartbeat();
-		sleep(SLEEP_INT);
+		work();
 	}
 
 	closelog();
