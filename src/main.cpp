@@ -9,25 +9,28 @@
 #include <sys/file.h>
 #include <cstring>
 #include <string>
+#include "Tintin_reporter.hpp"
 
 std::atomic<bool> g_running { true };
-constexpr const char* LOCK_FILE_PATH = "/var/run/Matt_daemon.lock";
+constexpr const char* LOCK_FILE_PATH = "/var/lock/Matt_daemon.lock";
 
 void do_heartbeat(void)
 {
-	// this wouldn't work obviously :)
+	// this is not supposed to function!
 	std::println("Matt_daemon is working as expected.");
 }
 
 void handle_sigterm(int signum) {
 	(void) signum;
 	syslog(LOG_NOTICE, "Received a SIGTERM, exit right now...");
+	Tintin_reporter::getInstance().log(Tintin_reporter::Level::INFO, "Received a SIGTERM, exit right now...");
 	exit(EXIT_SUCCESS);
 }
 
 void handle_sigint(int signum) {
 	(void) signum;
 	syslog(LOG_NOTICE, "Received a SIGINT, exiting right now...");
+	Tintin_reporter::getInstance().log(Tintin_reporter::Level::INFO, "Received a SIGINT, exit right now...");
 	exit(EXIT_SUCCESS);
 }
 
@@ -64,9 +67,16 @@ bool ensure_one_instance()
 
 int daemon(void)
 {
+	if (!Tintin_reporter::getInstance().init())
+	{
+		std::cerr << "Failed to init Tintin_reporter.\n";
+		exit(EXIT_FAILURE);
+	}
+
 	if (!(geteuid() == 0))
 	{
 		std::println("Matt_daemon requires root privileges.");
+		Tintin_reporter::getInstance().log(Tintin_reporter::Level::ERROR, "Matt_daemon requires root privileges.");
 		openlog("Matt_daemon", LOG_PID, LOG_DAEMON);
 		syslog(LOG_ERR, "Matt_daemon requires root privileges");
 		closelog();
@@ -76,6 +86,7 @@ int daemon(void)
 	if (!ensure_one_instance())
 	{
 		openlog("Matt_daemon", LOG_PID, LOG_DAEMON);
+		Tintin_reporter::getInstance().log(Tintin_reporter::Level::ERROR, "An instance of Matt_daemon is already running.");
 		syslog(LOG_ERR, "An instance of Matt_daemon is already running.");
 		closelog();
 		exit(EXIT_FAILURE);
@@ -86,23 +97,23 @@ int daemon(void)
 	pid = fork();
 	if (pid > 0)
 	{
-		/* parent process */
 		exit(EXIT_SUCCESS);
 	}
 	else if (pid < 0)
 	{
-		/* something went wrong */
 		exit(EXIT_FAILURE);
 	}
 
 	umask(0);
-	/* child process */
 	openlog("Matt_daemon", LOG_NOWAIT | LOG_PID, LOG_USER);
 	syslog(LOG_NOTICE, "Successfully started Matt_daemon");
+	Tintin_reporter::getInstance().log(Tintin_reporter::Level::INFO, "Successfully started Matt_daemon");
 	sid = setsid();
 	if (sid < 0)
 	{
 		syslog(LOG_ERR, "Could not generate session ID for child process");
+		Tintin_reporter::getInstance().log(Tintin_reporter::Level::ERROR, "Could not generate session ID for child process");
+	sid = setsid();
 		exit(EXIT_FAILURE);
 	}
 
@@ -113,11 +124,11 @@ int daemon(void)
 	const int SLEEP_INT = 5;
 	while (g_running.load(std::memory_order_relaxed))
 	{
+		//work();
 		do_heartbeat();
 		sleep(SLEEP_INT);
 	}
 
-	syslog(LOG_NOTICE, "For some reason, we quit the main loop. Matt_daemon is stopping right now.");
 	closelog();
 	exit(EXIT_SUCCESS);
 	return 0;
