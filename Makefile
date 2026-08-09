@@ -8,7 +8,7 @@ OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRCS))
 DEPS := $(OBJS:.o=.d)
 
 CXX := c++
-STD ?= c++23
+STD := c++23
 CXXFLAGS := -Wall -Wextra -Werror -std=$(STD) -I$(SRC_DIR) -g -MMD -MP
 LDFLAGS :=
 LDLIBS :=
