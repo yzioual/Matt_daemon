@@ -55,7 +55,7 @@ bool ensure_one_instance()
 	{
 		if (errno == EWOULDBLOCK || errno == EAGAIN)
 		{
-			std::cerr << "Error: Another instance of Matt_daemon is already running.\n";
+			std::cerr << "Can't open :/var/lock/matt_daemon.lock\n";
 		}
 		else
 		{
