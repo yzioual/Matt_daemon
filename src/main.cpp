@@ -27,6 +27,15 @@ void handle_sigint(int signum) {
 
 int daemon(void)
 {
+	if (!(geteuid() == 0))
+	{
+		std::println("Matt_daemon requires root privileges.");
+		openlog("Matt_daemon.log", LOG_NOWAIT | LOG_PID, LOG_USER);
+		syslog(LOG_ERR, "Matt_daemon requires root privileges");
+		closelog();
+		exit(EXIT_FAILURE);
+	}
+
 	pid_t pid, sid;
 	
 	pid = fork();
@@ -45,7 +54,6 @@ int daemon(void)
 	/* child process */
 	openlog("Matt_daemon.log", LOG_NOWAIT | LOG_PID, LOG_USER);
 	syslog(LOG_NOTICE, "Successfully started Matt_daemon");
-	
 	sid = setsid();
 	if (sid < 0)
 	{
@@ -72,12 +80,20 @@ int daemon(void)
 
 int main(void)
 {
-	struct sigaction sa{};
-	sa.sa_handler = handle_sigterm;
-	sigemptyset(&sa.sa_mask);
-	sa.sa_flags = 0;
-	sigaction(SIGTERM, &sa, nullptr);
-	sigaction(SIGINT, &sa, nullptr);
+	struct sigaction sa_int{};
+	struct sigaction sa_term{};
+
+	sa_term.sa_flags = 0;
+	sa_int.sa_flags = 0;
+
+	sigemptyset(&sa_term.sa_mask);
+	sigemptyset(&sa_int.sa_mask);
+
+	sa_int.sa_handler = handle_sigint;
+	sa_term.sa_handler = handle_sigterm;
+
+	sigaction(SIGTERM, &sa_term, nullptr);
+	sigaction(SIGINT, &sa_int, nullptr);
 	daemon();	
 	return (0);
 }
