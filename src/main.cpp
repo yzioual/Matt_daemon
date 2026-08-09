@@ -164,6 +164,11 @@ void work() {
                     }
 
                     if (!message.empty()) {
+			if (message == "quit")
+			{
+				logger.log(Tintin_reporter::Level::INFO, "Byte Byte.....");
+				exit(EXIT_SUCCESS);
+			}
                         logger.log(Tintin_reporter::Level::INFO, "User input: " + message);
                     }
                 }
