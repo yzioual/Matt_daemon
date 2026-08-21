@@ -11,6 +11,10 @@
 class SignalGuard {
 public:
     SignalGuard() = delete;
+    ~SignalGuard() = delete;
+
+    SignalGuard(const SignalGuard&) = delete;
+    SignalGuard& operator=(const SignalGuard&) = delete;
 
     static void install();
     static int consumeSignal();

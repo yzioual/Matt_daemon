@@ -13,6 +13,7 @@ class TcpServer {
 public:
     enum class StopReason { Quit, Signal, FatalError };
 
+    TcpServer() = delete;
     TcpServer(int port, std::size_t maxClients);
     ~TcpServer();
 
