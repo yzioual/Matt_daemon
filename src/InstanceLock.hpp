@@ -26,6 +26,7 @@ public:
 
 private:
     int fd_ = -1;
+    std::string path_;
 };
 
 #endif

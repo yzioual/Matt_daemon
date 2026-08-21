@@ -25,6 +25,7 @@ bool InstanceLock::acquire(const std::string& path) {
     }
 
     fd_ = fd;
+    path_ = path;
     refreshPid();
     return true;
 }
@@ -42,6 +43,9 @@ void InstanceLock::refreshPid() {
 }
 
 InstanceLock::~InstanceLock() {
-    if (fd_ >= 0)
+    if (fd_ >= 0) {
+        flock(fd_, LOCK_UN);
         close(fd_);
+        unlink(path_.c_str());
+    }
 }

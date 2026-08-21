@@ -3,14 +3,18 @@
 
 #include <csignal>
 
-// Installs SIGINT/SIGTERM handlers that only set a flag -- the one thing
-// the C++ standard guarantees is safe to do inside a signal handler -- and
-// ignores SIGPIPE so a client dropping mid-write can't kill the daemon.
-// The actual logging and shutdown happen wherever consumeSignal() is
-// polled, back in normal execution context.
+// Installs handlers for SIGINT/SIGTERM/SIGQUIT/SIGHUP that only set a flag
+// -- the one thing the C++ standard guarantees is safe to do inside a
+// signal handler -- and ignores SIGPIPE so a client dropping mid-write
+// can't kill the daemon. The actual logging and shutdown happen wherever
+// consumeSignal() is polled, back in normal execution context.
 class SignalGuard {
 public:
     SignalGuard() = delete;
+    ~SignalGuard() = delete;
+
+    SignalGuard(const SignalGuard&) = delete;
+    SignalGuard& operator=(const SignalGuard&) = delete;
 
     static void install();
     static int consumeSignal();

@@ -10,7 +10,12 @@
 // then runs the TCP server until quit/signal/fatal error.
 class Daemon {
 public:
+    Daemon() = delete;
     Daemon(int port, int maxClients, std::string lockPath);
+    ~Daemon() = default;
+
+    Daemon(const Daemon&) = delete;
+    Daemon& operator=(const Daemon&) = delete;
 
     int run();
 

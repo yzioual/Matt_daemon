@@ -12,16 +12,17 @@ void SignalGuard::install() {
     sigemptyset(&sa_stop.sa_mask);
     sa_stop.sa_handler = handle;
 
-    struct sigaction sa_ignore{};
-    sa_ignore.sa_flags = 0;
-    sigemptyset(&sa_ignore.sa_mask);
-    sa_ignore.sa_handler = SIG_IGN;
-
     sigaction(SIGTERM, &sa_stop, nullptr);
     sigaction(SIGINT, &sa_stop, nullptr);
+    sigaction(SIGQUIT, &sa_stop, nullptr);
+    sigaction(SIGHUP, &sa_stop, nullptr);
     // A client dropping its connection right before we write() to it would
     // otherwise raise SIGPIPE, whose default action kills the whole daemon.
-    sigaction(SIGPIPE, &sa_ignore, nullptr);
+    signal(SIGPIPE, SIG_IGN);
+    // SIGKILL/SIGSTOP are unblockable by POSIX design, and synchronous
+    // fault signals (SIGSEGV, SIGBUS, SIGABRT, SIGFPE) leave the process
+    // in an undefined state, so resuming normal execution or doing I/O
+    // from their handler would itself be unsafe -- neither is handled.
 }
 
 int SignalGuard::consumeSignal() {
